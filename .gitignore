@@ -1,0 +1,54 @@
+
+# Android build outputs
+.gradle/
+**/build/
+local.properties
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# IDE
+.idea/
+.vscode/
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+
+# Downloaded Gradle distributions
+tools/gradle-*-bin.zip
+tools/gradle-*/
+
+# Android build outputs
+.gradle/
+**/build/
+local.properties
+
+# Python virtual environment
+.venv/
+__pycache__/
+*.py[cod]
+
+# Downloaded Gradle distribution
+tools/gradle-*-bin.zip
+tools/gradle-*/
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+
+# Generated files
+.gradle/
+**/build/
+.venv/
+__pycache__/
+tools/gradle-*-bin.zip
+tools/gradle-*/
+local.properties
+.env
+.env.*
+!.env.example

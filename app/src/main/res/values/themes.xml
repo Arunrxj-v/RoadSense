@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.RoadSenseVision" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#FBFBFA</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowBackground">#FBFBFA</item>
+    </style>
+</resources>
