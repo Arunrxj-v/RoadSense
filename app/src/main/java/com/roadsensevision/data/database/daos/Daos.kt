@@ -31,8 +31,11 @@ interface MonitoringSessionDao {
 
 @Dao
 interface RoadDefectDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(defect: RoadDefectEntity)
+
+    @Update
+    suspend fun update(defect: RoadDefectEntity)
 
     @Query("SELECT * FROM road_defects WHERE defectId = :defectId")
     suspend fun getDefect(defectId: String): RoadDefectEntity?
@@ -71,6 +74,41 @@ interface PotholeObservationDao {
     suspend fun getBestObservationForDefect(defectId: String): PotholeObservationEntity?
 
     @Query("""
+        SELECT * FROM pothole_observations
+        WHERE synchronizationStatus IN ('PENDING', 'FAILED')
+          AND latitude IS NOT NULL
+          AND longitude IS NOT NULL
+        ORDER BY observedAt ASC
+        LIMIT :limit
+    """)
+    suspend fun getAwaitingSync(limit: Int): List<PotholeObservationEntity>
+
+    @Query("""
+        UPDATE pothole_observations
+        SET synchronizationStatus = :status, serverRecordId = :serverRecordId
+        WHERE observationId = :observationId
+    """)
+    suspend fun updateSyncState(observationId: String, status: String, serverRecordId: String?)
+
+    @Query("SELECT COUNT(*) FROM pothole_observations WHERE synchronizationStatus = :status")
+    fun observeCountByStatus(status: String): Flow<Int>
+
+    @Query("""
+        SELECT COUNT(*) FROM pothole_observations
+        WHERE synchronizationStatus = 'FAILED'
+          AND latitude IS NOT NULL
+          AND longitude IS NOT NULL
+    """)
+    fun observeFailedUploadCount(): Flow<Int>
+
+    @Query("""
+        SELECT COUNT(*) FROM pothole_observations
+        WHERE synchronizationStatus = 'FAILED'
+          AND (latitude IS NULL OR longitude IS NULL)
+    """)
+    fun observeNoLocationCount(): Flow<Int>
+
+    @Query("""
         SELECT o.observationId AS observationId, o.defectId AS defectId, o.sessionId AS sessionId,
                o.observedAt AS observedAt, o.latitude AS latitude, o.longitude AS longitude,
                o.gpsAccuracy AS gpsAccuracy, o.confidence AS confidence,
@@ -91,7 +129,7 @@ data class ObservationDetail(
     val longitude: Double?,
     val gpsAccuracy: Float?,
     val confidence: Float,
-    val imageRelativePath: String,
+    val imageRelativePath: String?,
     val locationQuality: String,
     val synchronizationStatus: String
 )

@@ -313,15 +313,16 @@ class MonitoringViewModel(application: Application) : AndroidViewModel(applicati
         val sample: LocationSample? = locationProvider.sampleNear(confirmed.confirmedAt)
         val quality = locationProvider.qualityOf(sample)
 
-        // Save the representative (annotated) frame as evidence.
-        val relativePath = synchronized(settingsLock) {
-            if (settings.saveEvidence) {
-                repository.saveEvidenceImage(frame, confirmed.box, confirmed.confidence)
-            } else null
+        // Save the representative (annotated) frame as evidence when enabled.
+        val saveEvidence = synchronized(settingsLock) { settings.saveEvidence }
+        val relativePath = if (saveEvidence) {
+            repository.saveEvidenceImage(frame, confirmed.box, confirmed.confidence)
+        } else {
+            null
         }
 
-        if (relativePath == null) {
-            // Evidence save failed; do not record a hollow observation.
+        if (saveEvidence && relativePath == null) {
+            // Evidence was requested but could not be written; do not record a hollow observation.
             android.util.Log.w("RoadSense", "Evidence save failed; observation dropped")
             return
         }

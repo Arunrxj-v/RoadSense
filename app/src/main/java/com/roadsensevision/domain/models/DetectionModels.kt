@@ -83,7 +83,7 @@ enum class LocationQuality {
     UNAVAILABLE
 }
 
-/** Phase 2 sync state. Always PENDING in Phase 1 (local-only, no upload). */
+/** Upload lifecycle for a locally persisted observation. */
 enum class SyncStatus(val value: String) {
     PENDING("PENDING"),
     SYNCED("SYNCED"),

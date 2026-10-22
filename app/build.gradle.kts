@@ -5,6 +5,13 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+val roadsenseApiBaseUrl = (project.findProperty("ROADSENSE_API_BASE_URL") as String?)
+    ?: System.getenv("ROADSENSE_API_BASE_URL")
+    ?: "http://100.104.179.69:5001/api/v1"
+val roadsenseIngestApiKey = (project.findProperty("ROADSENSE_INGEST_API_KEY") as String?)
+    ?: System.getenv("ROADSENSE_INGEST_API_KEY")
+    ?: ""
+
 android {
     namespace = "com.roadsensevision"
     compileSdk = 35
@@ -13,8 +20,12 @@ android {
         applicationId = "com.roadsensevision"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0-phase1"
+        versionCode = 2
+        versionName = "2.0.0-phase2"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "API_BASE_URL", "\"$roadsenseApiBaseUrl\"")
+        buildConfigField("String", "INGEST_API_KEY", "\"$roadsenseIngestApiKey\"")
     }
 
     buildTypes {
@@ -25,6 +36,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -87,6 +99,9 @@ dependencies {
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
+    // Background offline upload queue
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
+
     // Tests
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
@@ -94,4 +109,9 @@ dependencies {
     testImplementation("androidx.test:core:1.6.1")
     // Full ONNX Runtime for JVM so unit tests execute the real model end-to-end.
     testImplementation("com.microsoft.onnxruntime:onnxruntime:1.18.0")
+
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.room:room-testing:2.6.1")
+    androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
 }

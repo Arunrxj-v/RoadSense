@@ -68,16 +68,42 @@ fun HistoryScreen(
     onOpenDefect: (String) -> Unit
 ) {
     val defects by appViewModel.defects.collectAsState()
+    val observations by appViewModel.observations.collectAsState()
     val observationCount by appViewModel.observationCount.collectAsState()
+    val syncSummary by appViewModel.syncSummary.collectAsState()
     val context = LocalContext.current
+
+    val syncLabel = when {
+        !syncSummary.configured -> "Sync not configured"
+        syncSummary.uploading -> "Uploading"
+        syncSummary.failed > 0 -> "Sync needs attention"
+        syncSummary.pending > 0 -> "Pending upload"
+        syncSummary.noLocation > 0 -> "GPS needed"
+        syncSummary.synced > 0 -> "All synced"
+        else -> "Ready to sync"
+    }
+    val syncActive = syncSummary.configured &&
+        !syncSummary.uploading &&
+        syncSummary.pending == 0 &&
+        syncSummary.failed == 0 &&
+        syncSummary.noLocation == 0 &&
+        syncSummary.synced > 0
+    val syncDetail = when {
+        !syncSummary.configured -> "Server sync not configured"
+        syncSummary.uploading -> "Uploading queued observations"
+        syncSummary.failed > 0 -> "${syncSummary.failed} failed · ${syncSummary.pending} pending"
+        syncSummary.pending > 0 -> "${syncSummary.pending} pending · ${syncSummary.synced} synced"
+        syncSummary.noLocation > 0 -> "${syncSummary.noLocation} no GPS · ${syncSummary.synced} synced"
+        else -> "${syncSummary.synced} synced"
+    }
 
     var query by remember { mutableStateOf("") }
     var severityFilter by remember { mutableStateOf<Severity?>(null) }
 
     // Build display rows: unique defects with their best observation.
-    val rows = remember(defects, appViewModel.observations.value) {
+    val rows = remember(defects, observations) {
         defects.mapNotNull { defect ->
-            val obs = appViewModel.observationForDefect(defect.defectId)
+            val obs = observations.filter { it.defectId == defect.defectId }.maxByOrNull { it.confidence }
             val severity = obs?.let { Severity.fromConfidence(it.confidence) } ?: Severity.MODERATE
             Triple(defect, obs, severity)
         }
@@ -98,7 +124,7 @@ fun HistoryScreen(
             Spacer(Modifier.height(16.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("Detection history", style = HeadlineLg, color = Ink)
-                StatusChip(label = "Saved locally", active = true)
+                StatusChip(label = syncLabel, active = syncActive)
             }
             Text(
                 "$observationCount potholes automatically recorded",
@@ -144,7 +170,7 @@ fun HistoryScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("${filtered.size} unique defects", style = LabelMd, color = Slate)
-                Text("Offline · no sync", style = LabelSm, color = Primary)
+                Text(syncDetail, style = LabelSm, color = Primary)
             }
 
             Spacer(Modifier.height(8.dp))

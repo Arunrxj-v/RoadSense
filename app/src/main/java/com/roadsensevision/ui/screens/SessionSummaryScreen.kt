@@ -64,6 +64,7 @@ fun SessionSummaryScreen(
     val latestSession by appViewModel.latestSession.collectAsState()
     val observations by appViewModel.observations.collectAsState()
     val defects by appViewModel.defects.collectAsState()
+    val syncSummary by appViewModel.syncSummary.collectAsState()
 
     val session = latestSession
     val sessionObs = session?.let { s ->
@@ -110,7 +111,19 @@ fun SessionSummaryScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Filled.Save, contentDescription = null, tint = Slate, modifier = Modifier.size(14.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("Saved locally", style = LabelMd, color = Slate)
+                                Text(
+                                    when {
+                                        !syncSummary.configured -> "Saved locally"
+                                        syncSummary.uploading -> "Saved locally · uploading queued"
+                                        syncSummary.pending + syncSummary.failed > 0 ->
+                                            "Saved locally · ${syncSummary.pending + syncSummary.failed} queued"
+                                        syncSummary.noLocation > 0 ->
+                                            "Saved locally · ${syncSummary.noLocation} without GPS"
+                                        else -> "Synced to server"
+                                    },
+                                    style = LabelMd,
+                                    color = Slate
+                                )
                             }
                         }
                         Spacer(Modifier.height(8.dp))
@@ -188,7 +201,7 @@ fun SessionSummaryScreen(
                         Column {
                             Text("Integrity & telemetry", style = LabelLg, color = Ink)
                             Text(
-                                "100% on-device inference · ${stats.inferences} model runs · zero cloud dependencies",
+                                "100% on-device inference · ${stats.inferences} model runs · metadata sync only",
                                 style = com.roadsensevision.ui.theme.BodySm, color = Slate
                             )
                         }

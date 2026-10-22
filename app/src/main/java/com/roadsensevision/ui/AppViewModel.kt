@@ -10,6 +10,10 @@ import com.roadsensevision.data.repository.DetectionRepository
 import com.roadsensevision.data.database.MonitoringSessionEntity
 import com.roadsensevision.data.database.PotholeObservationEntity
 import com.roadsensevision.data.database.RoadDefectEntity
+import com.roadsensevision.data.sync.IngestionClient
+import com.roadsensevision.data.sync.SyncScheduler
+import com.roadsensevision.data.sync.SyncSummary
+import com.roadsensevision.domain.models.SyncStatus
 import com.roadsensevision.utilities.GeoUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,6 +44,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     val observationCount: StateFlow<Int> = repository.observeObservationCount()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    val syncSummary: StateFlow<SyncSummary> = combine(
+        repository.observeSyncCount(SyncStatus.PENDING),
+        repository.observeSyncCount(SyncStatus.SYNCED),
+        repository.observeFailedUploadCount(),
+        repository.observeNoLocationCount(),
+        SyncScheduler.uploading,
+    ) { pending, synced, failed, noLocation, uploading ->
+        SyncSummary(
+            pending = pending,
+            synced = synced,
+            failed = failed,
+            noLocation = noLocation,
+            configured = IngestionClient().isConfigured,
+            uploading = uploading,
+        )
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        SyncSummary(configured = IngestionClient().isConfigured),
+    )
 
     val settings: StateFlow<DetectionSettings> = preferences.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, DetectionSettings(
@@ -78,6 +103,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateSaveEvidence(value: Boolean) {
         viewModelScope.launch { preferences.updateSaveEvidence(value) }
+    }
+
+    fun syncNow() {
+        SyncScheduler.requestImmediateSync(getApplication<Application>(), force = true)
     }
 
     fun clearAllData(onDone: () -> Unit = {}) {

@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -72,6 +73,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val settings by appViewModel.settings.collectAsState()
+    val syncSummary by appViewModel.syncSummary.collectAsState()
     val monitoringState by monitoringViewModel.ui.collectAsState()
 
     val cameraGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
@@ -81,6 +83,14 @@ fun SettingsScreen(
 
     val modelReady = monitoringState.modelStatus == ModelStatus.READY
     val evidenceBytes = appViewModel.evidenceStorageBytes()
+    val syncDescription = when {
+        !syncSummary.configured -> "Ingestion API key is not configured"
+        syncSummary.uploading -> "Uploading queued observations"
+        syncSummary.failed > 0 -> "${syncSummary.failed} failed · ${syncSummary.pending} pending"
+        syncSummary.pending > 0 -> "${syncSummary.pending} observations queued for upload"
+        syncSummary.noLocation > 0 -> "${syncSummary.synced} synced · ${syncSummary.noLocation} without GPS"
+        else -> "${syncSummary.synced} observations synced"
+    }
 
     Column(Modifier.fillMaxSize().background(Color(0xFFFBFBFA))) {
         DetailTopBar(title = "Settings", onBack = onBack)
@@ -179,7 +189,12 @@ fun SettingsScreen(
                     onCheckedChange = { appViewModel.updateSaveEvidence(it) }
                 )
                 Divider()
-                InfoRow(Icons.Filled.Save, "Offline-first mode", "Local on-device storage only", trailing = "On")
+                InfoRow(
+                    Icons.Filled.Save,
+                    "Offline-first mode",
+                    "Saved locally first, uploaded when connected",
+                    trailing = "On"
+                )
                 Divider()
                 // Storage usage
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
@@ -189,6 +204,50 @@ fun SettingsScreen(
                     }
                     val total = formatBytes(evidenceBytes)
                     Text("Images stored in app-private storage · $total used", style = BodySm, color = Slate)
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            // ---- Server sync ----
+            SectionLabel("Server sync")
+            CardColumn {
+                InfoRow(
+                    Icons.Filled.Sync,
+                    "Observation upload",
+                    syncDescription,
+                    trailing = when {
+                        !syncSummary.configured -> "Off"
+                        syncSummary.uploading -> "Uploading"
+                        else -> "On"
+                    }
+                )
+                Divider()
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = syncSummary.configured && !syncSummary.uploading) {
+                            appViewModel.syncNow()
+                        }
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.Sync, contentDescription = null, tint = Primary, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Sync now", style = HeadlineSm, color = Ink)
+                        Text("Retry queued and failed observations", style = BodySm, color = Slate)
+                    }
+                    Text(
+                        when {
+                            syncSummary.uploading -> "Uploading"
+                            syncSummary.pending + syncSummary.failed > 0 -> "Retry"
+                            syncSummary.noLocation > 0 -> "GPS needed"
+                            else -> "Up to date"
+                        },
+                        style = LabelMd,
+                        color = Primary
+                    )
                 }
             }
 
@@ -222,7 +281,7 @@ fun SettingsScreen(
             SectionLabel("Privacy")
             CardColumn {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    Text("RoadSense runs fully on-device. Images and coordinates are stored only in this app's private storage and are never uploaded. A server sync is reserved for Phase 2 and is disabled in this release.",
+                    Text("Detection and evidence images stay on-device. When the server is configured and reachable, only pothole metadata (coordinates, timestamp, confidence, and GPS accuracy) is uploaded. Camera frames are never sent.",
                         style = BodySm, color = Slate)
                 }
             }
@@ -234,9 +293,9 @@ fun SettingsScreen(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                     Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Secondary, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("RoadSense Vision v1.0.0", style = LabelMd, color = Ink)
+                    Text("RoadSense Vision v2.0.0", style = LabelMd, color = Ink)
                 }
-                Text("Phase 1 · local on-device prototype", style = LabelSm, color = Slate)
+                Text("Phase 2 · on-device detection + server sync", style = LabelSm, color = Slate)
             }
             Spacer(Modifier.height(24.dp))
         }

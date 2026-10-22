@@ -13,6 +13,7 @@ The goal is to simplify road damage identification and help build safer roads th
 - **GPS Integration** — Retrieves geographical coordinates for detected potholes.
 - **Live Monitoring** — Provides an interface for monitoring road conditions.
 - **On-Device Inference** — Designed to run machine learning inference locally on Android.
+- **Offline-First Sync** — Saves detections in Room, then uploads metadata to the RoadSense API when a network is available.
 - **Native Android App** — Built with Kotlin and Jetpack Compose.
 
 ## 🛠️ Tech Stack
@@ -25,6 +26,8 @@ The goal is to simplify road damage identification and help build safer roads th
 | ONNX Runtime | On-device machine learning inference |
 | YOLO | Pothole detection |
 | Android Location APIs | GPS coordinates |
+| Room | Local observation persistence |
+| WorkManager | Offline upload queue and retries |
 | Gradle | Build automation |
 
 ## 🏗️ Architecture
@@ -50,6 +53,15 @@ Pothole Detections
       ├── Detection Information
       │
       └── GPS Coordinates
+                │
+                ▼
+        Room (local-first)
+                │
+                ▼
+      WorkManager upload queue
+                │
+                ▼
+   POST /api/v1/internal/reports
 ```
 
 ## 📱 Project Roadmap
@@ -60,28 +72,26 @@ Pothole Detections
 - [x] Camera preview integration
 - [x] GPS integration
 - [x] Monitoring interface
-- [ ] Reliable real-time pothole detection
-- [ ] Detection visualization and confidence scores
-- [ ] Associate detections with GPS coordinates
+- [x] Reliable real-time pothole detection
+- [x] Detection visualization and confidence scores
+- [x] Associate detections with GPS coordinates
 - [ ] Validate performance on physical Android devices
 
-### Phase 2 — Public Pothole Map
+### Phase 2 — Server Sync and Public Map
 
-- [ ] Develop a public website to display pothole detections
-- [ ] Display detected potholes on an interactive map
-- [ ] Show geographical locations and detection details
-- [ ] Develop a backend for storing and retrieving detection data
-- [ ] Allow the public to explore road conditions geographically
-
-> **Note:** The public website and backend are planned for Phase 2 and are not part of the current Phase 1 implementation.
+- [x] Public website and read-only API
+- [x] Interactive canonical pothole map and ledger
+- [x] Backend storage, deduplication, and retrieval
+- [x] Android metadata ingestion with offline queue and retries
+- [ ] Validate the full ingestion path on physical devices
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 
 - Android Studio
-- Android SDK
-- JDK compatible with the project's Gradle configuration
+- Android SDK Platform 35 and Build Tools 35
+- JDK 17 (Android Gradle Plugin 8.7.3; the Gradle wrapper rejects an absent JDK)
 - An Android device or emulator
 
 ### Installation
@@ -111,7 +121,28 @@ Model/best.onnx
 
 Ensure the model is available at the location expected by the application's model-loading implementation.
 
-**4. Build the application**
+**4. Configure server ingestion**
+
+The API base and ingest key are build values and are not stored in source.
+Set them through Gradle properties or environment variables:
+
+```bash
+export ROADSENSE_API_BASE_URL=http://100.104.179.69:5001/api/v1
+export ROADSENSE_INGEST_API_KEY='<same key as the server .env>'
+```
+
+`ROADSENSE_API_BASE_URL` may be the server root (`http://100.104.179.69:5001`)
+or the full API base (`http://100.104.179.69:5001/api/v1`); the client normalizes
+it to `/api/v1`. The phone must be connected to the same Tailscale tailnet as the
+server because the API binds only to the Tailscale address.
+
+Without a key, detection remains local and Settings reports that sync is not
+configured. Camera frames and evidence images are never uploaded; only report
+ID, coordinates, timestamp, confidence, and GPS accuracy are sent. Rebuild and
+reinstall the APK after setting the values; the old Phase 1 build has no upload
+implementation.
+
+**5. Build the application**
 
 On macOS or Linux:
 
@@ -120,13 +151,21 @@ chmod +x gradlew
 ./gradlew assembleDebug
 ```
 
+To pass the values explicitly:
+
+```bash
+./gradlew assembleDebug \
+  -PROADSENSE_API_BASE_URL=http://100.104.179.69:5001/api/v1 \
+  -PROADSENSE_INGEST_API_KEY='<ingest key>'
+```
+
 On Windows:
 
 ```powershell
 .\gradlew.bat assembleDebug
 ```
 
-**5. Install the APK**
+**6. Install the APK**
 
 Connect an Android device with USB debugging enabled, then run:
 
@@ -140,6 +179,7 @@ The application may require the following permissions, depending on the implemen
 
 - **Camera:** Capture road footage for analysis.
 - **Location:** Retrieve geographical coordinates for detections.
+- **Internet / network state:** Upload queued observation metadata and retry when connected.
 
 Grant the required permissions when prompted.
 
@@ -165,7 +205,7 @@ This project is a prototype and should not be used as the sole basis for road sa
 - Optimize inference performance on mobile devices.
 - Reduce duplicate detections across consecutive frames.
 - Improve GPS accuracy and location association.
-- Introduce an interactive public pothole map.
+- Validate sync retries, duplicate handling, and GPS gaps on physical devices.
 - Add detection history and road-condition analytics.
 - Evaluate performance across multiple Android devices.
 

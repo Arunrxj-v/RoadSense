@@ -137,8 +137,8 @@ fun LiveMonitoringScreen(
     }
 
     // GPS refresh: update UI state once per second while monitoring.
-    LaunchedEffect(monitoringViewModel.ui.value.sessionActive) {
-        if (monitoringViewModel.ui.value.sessionActive) {
+    LaunchedEffect(state.sessionActive) {
+        if (state.sessionActive) {
             launch {
                 while (monitoringViewModel.ui.value.sessionActive) {
                     monitoringViewModel.refreshGpsStatus()

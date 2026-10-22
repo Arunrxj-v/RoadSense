@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import androidx.room.Room
 import com.roadsensevision.data.database.AppDatabase
 import com.roadsensevision.data.database.MonitoringSessionEntity
 import com.roadsensevision.data.database.PotholeObservationEntity
@@ -13,6 +12,7 @@ import com.roadsensevision.data.database.RoadDefectEntity
 import com.roadsensevision.data.database.dao.MonitoringSessionDao
 import com.roadsensevision.data.database.dao.PotholeObservationDao
 import com.roadsensevision.data.database.dao.RoadDefectDao
+import com.roadsensevision.data.sync.SyncScheduler
 import com.roadsensevision.domain.detection.DuplicatePolicy
 import com.roadsensevision.domain.models.BoxF
 import com.roadsensevision.domain.models.LocationQuality
@@ -22,6 +22,8 @@ import com.roadsensevision.domain.models.SyncStatus
 import com.roadsensevision.utilities.GeoUtils
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
@@ -30,25 +32,22 @@ import kotlin.math.roundToInt
 
 class DetectionRepository(private val appContext: Context) {
 
-    private val db: AppDatabase by lazy {
-        Room.databaseBuilder(appContext, AppDatabase::class.java, AppDatabase.DATABASE_NAME)
-            .fallbackToDestructiveMigration()
-            .build()
-    }
+    private val db: AppDatabase by lazy { AppDatabase.getInstance(appContext) }
 
     val sessionDao: MonitoringSessionDao get() = db.monitoringSessionDao()
     val defectDao: RoadDefectDao get() = db.roadDefectDao()
     val observationDao: PotholeObservationDao get() = db.potholeObservationDao()
 
     // ---- Defect ID generation (stable, human-readable PH-00001...) ----
-    @Volatile private var defectCounter: Int = -1
+    private var defectCounter: Int = -1
+    private val defectIdMutex = Mutex()
 
-    private suspend fun nextDefectId(): String {
+    private suspend fun nextDefectId(): String = defectIdMutex.withLock {
         if (defectCounter < 0) {
             defectCounter = defectDao.getDefectCount()
         }
         defectCounter++
-        return "PH-%05d".format(defectCounter)
+        "PH-%05d".format(defectCounter)
     }
 
     // ---- Evidence storage ----
@@ -205,7 +204,7 @@ class DetectionRepository(private val appContext: Context) {
         longitude: Double?,
         gpsAccuracy: Float?,
         locationQuality: LocationQuality,
-        evidenceRelativePath: String,
+        evidenceRelativePath: String?,
         mergeRadiusMeters: Float,
         mergeWindowMs: Long
     ): String? {
@@ -236,7 +235,7 @@ class DetectionRepository(private val appContext: Context) {
         val defectId: String
         if (matchedDefect != null) {
             defectId = matchedDefect.defectId
-            defectDao.insert(
+            defectDao.update(
                 matchedDefect.copy(
                     lastObservedAt = observedAt,
                     latestLatitude = latitude ?: matchedDefect.latestLatitude,
@@ -273,12 +272,45 @@ class DetectionRepository(private val appContext: Context) {
             confidence = confidence,
             imageRelativePath = evidenceRelativePath,
             locationQuality = locationQuality.name,
-            synchronizationStatus = SyncStatus.PENDING.value,
+            synchronizationStatus = if (latitude != null && longitude != null) {
+                SyncStatus.PENDING.value
+            } else {
+                SyncStatus.FAILED.value
+            },
             serverRecordId = null
         )
         observationDao.insert(observation)
+        if (observation.synchronizationStatus == SyncStatus.PENDING.value) {
+            SyncScheduler.requestImmediateSync(appContext)
+        }
         return defectId
     }
+
+    suspend fun getObservationsAwaitingSync(limit: Int): List<PotholeObservationEntity> =
+        observationDao.getAwaitingSync(limit)
+
+    suspend fun markSynced(observationId: String, serverRecordId: String) {
+        observationDao.updateSyncState(
+            observationId = observationId,
+            status = SyncStatus.SYNCED.value,
+            serverRecordId = serverRecordId,
+        )
+    }
+
+    suspend fun markSyncFailed(observationId: String) {
+        observationDao.updateSyncState(
+            observationId = observationId,
+            status = SyncStatus.FAILED.value,
+            serverRecordId = null,
+        )
+    }
+
+    fun observeSyncCount(status: SyncStatus): Flow<Int> =
+        observationDao.observeCountByStatus(status.value)
+
+    fun observeFailedUploadCount(): Flow<Int> = observationDao.observeFailedUploadCount()
+
+    fun observeNoLocationCount(): Flow<Int> = observationDao.observeNoLocationCount()
 
     suspend fun getLatestDefects(limit: Int): List<RoadDefectEntity> =
         defectDao.getRecentDefects(limit)
