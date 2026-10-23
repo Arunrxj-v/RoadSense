@@ -83,7 +83,7 @@ Pothole Detections
 - [x] Interactive canonical pothole map and ledger
 - [x] Backend storage, deduplication, and retrieval
 - [x] Android metadata ingestion with offline queue and retries
-- [ ] Validate the full ingestion path on physical devices
+- [x] Validate the full ingestion path on Android devices
 
 ## 🚀 Getting Started
 
@@ -124,17 +124,28 @@ Ensure the model is available at the location expected by the application's mode
 **4. Configure server ingestion**
 
 The API base and ingest key are build values and are not stored in source.
-Set them through Gradle properties or environment variables:
+Set them in `local.properties` (recommended; this file is gitignored), as Gradle
+properties, or as environment variables:
+
+```properties
+ROADSENSE_API_BASE_URL=https://server.tailda589d.ts.net/roadsense/api/v1
+ROADSENSE_INGEST_API_KEY=<same key as the server .env>
+```
 
 ```bash
-export ROADSENSE_API_BASE_URL=http://100.104.179.69:5001/api/v1
+export ROADSENSE_API_BASE_URL=https://server.tailda589d.ts.net/roadsense/api/v1
 export ROADSENSE_INGEST_API_KEY='<same key as the server .env>'
 ```
 
-`ROADSENSE_API_BASE_URL` may be the server root (`http://100.104.179.69:5001`)
-or the full API base (`http://100.104.179.69:5001/api/v1`); the client normalizes
-it to `/api/v1`. The phone must be connected to the same Tailscale tailnet as the
-server because the API binds only to the Tailscale address.
+Precedence is Gradle property, then environment variable, then `local.properties`.
+Rebuild after changing any of them because the values are compiled into `BuildConfig`.
+
+The default is the existing Tailscale Funnel ingress
+(`https://server.tailda589d.ts.net/roadsense/api/v1`), which forwards
+`/roadsense/api/*` to the Flask API on the home server. Use the full API base
+shown above or the server root (`https://server.tailda589d.ts.net/roadsense`);
+the client normalizes it to `/api/v1`. The Docker backend itself is bound to
+`127.0.0.1:5001`, so it is not directly reachable at the Tailscale IP:5001.
 
 Without a key, detection remains local and Settings reports that sync is not
 configured. Camera frames and evidence images are never uploaded; only report
@@ -155,7 +166,7 @@ To pass the values explicitly:
 
 ```bash
 ./gradlew assembleDebug \
-  -PROADSENSE_API_BASE_URL=http://100.104.179.69:5001/api/v1 \
+  -PROADSENSE_API_BASE_URL=https://server.tailda589d.ts.net/roadsense/api/v1 \
   -PROADSENSE_INGEST_API_KEY='<ingest key>'
 ```
 

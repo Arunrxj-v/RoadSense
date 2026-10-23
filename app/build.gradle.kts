@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -5,12 +7,26 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
-val roadsenseApiBaseUrl = (project.findProperty("ROADSENSE_API_BASE_URL") as String?)
-    ?: System.getenv("ROADSENSE_API_BASE_URL")
-    ?: "http://100.104.179.69:5001/api/v1"
-val roadsenseIngestApiKey = (project.findProperty("ROADSENSE_INGEST_API_KEY") as String?)
-    ?: System.getenv("ROADSENSE_INGEST_API_KEY")
-    ?: ""
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+
+fun configuredValue(name: String): String? =
+    (project.findProperty(name) as String?)
+        ?: System.getenv(name)
+        ?: localProperties.getProperty(name)
+
+val roadsenseApiBaseUrl = configuredValue("ROADSENSE_API_BASE_URL")
+    ?: "https://server.tailda589d.ts.net/roadsense/api/v1"
+val roadsenseIngestApiKey = configuredValue("ROADSENSE_INGEST_API_KEY") ?: ""
+
+if (roadsenseIngestApiKey.isBlank()) {
+    logger.warn(
+        "ROADSENSE_INGEST_API_KEY is not configured. Observation sync will stay off. " +
+            "Set it in local.properties, a Gradle property, or the environment."
+    )
+}
 
 android {
     namespace = "com.roadsensevision"
